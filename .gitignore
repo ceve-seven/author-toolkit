@@ -1,0 +1,50 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === 虚拟环境 ===
+.venv/
+venv/
+env/
+
+# === IDE ===
+.vscode/
+.idea/
+
+# === 运行时数据 ===
+data/
+output/
+logs/
+system_data/
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# === 测试缓存 ===
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === 环境变量 ===
+.env
+.env.local
+
+# === IDE + Tools ===
+.vscode/
+.idea/
+.trae/
+
+# === 项目特定 ===
+# 不保留 chromadb 自动生成的 SQLite 数据库
+data/chromadb/chroma.sqlite3
+data/novel.db
+
+# === 上传目录 ===
+.uploads/

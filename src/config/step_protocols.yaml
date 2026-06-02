@@ -1,0 +1,1185 @@
+# src/config/step_protocols.yaml（增强版）
+# 作用：定义每个环节 Agent 向用户展示的信息模板、生成约束和质量检查
+# 读取者：WorkflowOrchestrator._present_plan()
+# 读取时机：阶段一展示时
+# 注意：所有环节都需要用户交互，此文件不控制审核流程
+
+step_protocols:
+  inspiration:
+    display_name: 灵感启动
+    dependencies: []
+    generation_rule: 基于用户输入，生成 3 个创新的灵感方向
+    input_schema:
+      directions:
+        type: list
+        min_items: 3
+        max_items: 3
+        item_schema:
+          id: str
+          title:
+            type: str
+            min_length: 2
+          concept:
+            type: str
+            min_length: 20
+          innovation_score:
+            type: float
+            min: 0
+            max: 1
+          summary:
+            type: str
+            min_length: 50
+          emotional_potential:
+            type: float
+            min: 0
+            max: 1
+    quality_checks:
+    - check: innovation_score_range
+      rule: 每个方向的 innovation_score 必须在 0-1 之间
+      level: error
+    - check: direction_count
+      rule: 必须恰好生成 3 个方向
+      level: error
+    - check: direction_diversity
+      rule: 三个方向不可雷同（cosine < 0.6）
+      level: warning
+    agent_prompt_hints:
+    - 三个方向分别侧重情节驱动、角色驱动、设定驱动
+    - 每个方向附带一个具体场景梗概
+    - 创新性评分基于题材差异化程度
+    - 加载 src/ai/prompts/inspiration.md 中的灵感方向设计规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 分析用户输入的主题关键词'
+    - '  2. 生成 3 个差异化灵感方向'
+    - '  3. 每个方向附带创新性评分和梗概'
+    - '  4. 质量审查并展示'
+  theme:
+    display_name: 小说主题
+    dependencies:
+    - inspiration
+    generation_rule: 生成三层主题结构，包含主题陈述、表层主题、深层主题和情感入口
+    input_schema:
+      theme_statement:
+        type: str
+        min_length: 10
+        description: 一句话主题陈述，贯穿全文的核心命题
+      surface_theme:
+        type: str
+        min_length: 10
+        description: 表层主题，故事表面上探讨的话题
+      deep_theme:
+        type: str
+        min_length: 10
+        description: 深层主题，故事真正探讨的人性/哲学命题
+      emotional_entry:
+        type: str
+        min_length: 20
+        description: 情感入口，读者与主题产生情感共鸣的具体切入点
+    quality_checks:
+    - check: theme_three_layers
+      rule: 必须包含 theme_statement/surface_theme/deep_theme 三层
+      level: error
+    - check: emotional_entry_exists
+      rule: 必须包含情感入口描述
+      level: error
+    - check: theme_consistency
+      rule: 三层主题之间不得矛盾
+      level: warning
+    agent_prompt_hints:
+    - 主题陈述应足够具体，能指导后续所有创作决策
+    - 深层主题应触及普遍人性，不限于故事设定
+    - 情感入口应描述一个具体场景而非抽象概念
+    - 加载 src/ai/prompts/theme.md 中的主题结构设计规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 分析用户选定的灵感方向'
+    - '  2. 提炼三层主题结构'
+    - '  3. 设计情感入口场景'
+    - '  4. 质量审查并展示'
+  world_building:
+    display_name: 世界观设定
+    dependencies:
+    - theme
+    generation_rule: 生成 8 维度世界观规则集
+    input_schema:
+      dimensions:
+        type: list
+        min_items: 8
+        max_items: 8
+        item_schema:
+          name:
+            enum:
+            - 物理规则
+            - 地理空间
+            - 时间历史
+            - 社会结构
+            - 文化习俗
+            - 科技水平
+            - 魔法/超自然体系
+            - 经济体系
+          rules:
+            type: list
+            min_items: 2
+            item_schema:
+              id: str
+              description:
+                type: str
+                min_length: 10
+              scope: str
+              constraints: str
+              conflicts_with:
+                type: list
+    quality_checks:
+    - check: eight_dimensions
+      rule: 必须包含全部 8 个维度
+      level: error
+    - check: each_dimension_min_rules
+      rule: 每个维度至少 2 条规则
+      level: error
+    - check: world_theme_alignment
+      rule: 规则集与小说主题一致
+      level: warning
+    agent_prompt_hints:
+    - 每条规则需标注适用范围和限制条件
+    - 维度间规则可能存在互斥，标注 conflicts_with
+    - 规则粒度应均匀，避免某维度过于详细
+    - 加载 src/ai/prompts/world_building.md 中的世界观自洽性规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取小说主题和大纲数据'
+    - '  2. 逐维度生成规则（8 维度）'
+    - '  3. 标注规则间冲突关系'
+    - '  4. 执行五层世界观审查'
+    - '  5. 展示审查报告供用户确认'
+  character:
+    display_name: 人物设定
+    dependencies:
+    - world_building
+    generation_rule: 生成核心角色和配角，含四层档案，role 枚举含 protagonist/antagonist/supporting/minor
+    input_schema:
+      characters:
+        type: list
+        min_items: 3
+        item_schema:
+          id: str
+          name:
+            type: str
+            min_length: 1
+          role:
+            enum:
+            - protagonist
+            - antagonist
+            - supporting
+            - minor
+          layer1_identity:
+            type: object
+            required:
+            - name
+            - age
+            - occupation
+            - background
+          layer2_psychology:
+            type: object
+            required:
+            - motivation
+            - fear
+            - desire
+            - flaw
+          layer3_ability:
+            type: object
+            required:
+            - skills
+            - knowledge_boundaries
+          layer4_special:
+            type: object
+            required:
+            - secrets
+            - perception_filter
+    quality_checks:
+    - check: min_character_count
+      rule: 至少 3 个角色（1 主角 + 2 配角）
+      level: error
+    - check: four_layers_complete
+      rule: 每角色必须包含全部四层
+      level: error
+    - check: protagonist_secret
+      rule: 主角必须有秘密
+      level: warning
+    agent_prompt_hints:
+    - 每角色必须包含情感身体词典（非抽象描述）
+    - 语气指纹必须与角色身份一致
+    - 感知过滤器决定角色叙述视角
+    - 加载 src/ai/prompts/character.md 中的人物四层档案规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取世界观规则集'
+    - '  2. 生成主角 + 至少 2 名配角'
+    - '  3. 每角色构建四层档案：身份/心理/能力/特殊'
+    - '  4. 标注情感身体词典和语气指纹'
+    - '  5. 质量审查（完整性、世界观一致性）'
+  faction:
+    display_name: 势力设定
+    dependencies:
+    - world_building
+    generation_rule: 生成小说中的势力组织，含宗旨、结构和阵营
+    input_schema:
+      factions:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          name:
+            type: str
+            min_length: 2
+          ideology:
+            type: str
+            min_length: 10
+          structure:
+            type: object
+            required:
+            - leadership
+            - hierarchy
+            - membership
+          goals:
+            type: list
+            min_items: 1
+          resources:
+            type: list
+          alignment:
+            enum:
+            - 守序善良
+            - 中立善良
+            - 混乱善良
+            - 守序中立
+            - 绝对中立
+            - 混乱中立
+            - 守序邪恶
+            - 中立邪恶
+            - 混乱邪恶
+    quality_checks:
+    - check: faction_ideology
+      rule: 每个势力必须有明确的宗旨
+      level: error
+    - check: faction_structure
+      rule: 每个势力必须有组织结构
+      level: error
+    - check: faction_diversity
+      rule: 至少 2 个不同阵营的势力，确保冲突基础
+      level: warning
+    agent_prompt_hints:
+    - 势力宗旨应与世界观规则冲突产生叙事张力
+    - 组织结构的复杂度应与势力规模匹配
+    - 阵营标注不是道德判断，而是行为模式
+    - 加载 src/ai/prompts/faction.md 中的势力冲突模型规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取世界观规则集'
+    - '  2. 生成 2+ 个势力组织'
+    - '  3. 标注宗旨、结构和阵营'
+    - '  4. 质量审查并展示'
+  relation:
+    display_name: 人物关系
+    dependencies:
+    - character
+    generation_rule: 生成角色间关系网络，含关系类型、情感倾向和权力动态
+    input_schema:
+      relations:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          char_a: str
+          char_b: str
+          type:
+            enum:
+            - 亲情
+            - 友情
+            - 爱情
+            - 敌对
+            - 师生
+            - 主仆
+            - 同盟
+            - 利益
+            - 恩怨
+          emotional_tendency:
+            type: float
+            min: -1
+            max: 1
+          power_dynamic:
+            enum:
+            - 平等
+            - 甲方主导
+            - 乙方主导
+            - 动态变化
+          description:
+            type: str
+            min_length: 10
+    quality_checks:
+    - check: char_exists
+      rule: char_a 和 char_b 必须对应已存在的角色
+      level: error
+    - check: relation_unique
+      rule: 同一对角色之间只应有 1 条主要关系
+      level: warning
+    - check: protagonist_relations
+      rule: 主角至少有 2 条关系
+      level: warning
+    agent_prompt_hints:
+    - 关系应从角色设定中自然衍生，而非贴标签
+    - 情感倾向为负值不代表角色是坏人
+    - 权力动态应体现角色间的实际控制力差异
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取所有角色数据'
+    - '  2. 建立角色间关系网络'
+    - '  3. 标注情感倾向和权力动态'
+    - '  4. 质量审查并展示'
+  faction_relation:
+    display_name: 势力关系
+    dependencies:
+    - faction
+    generation_rule: 建立势力间的关系网络，含外交状态和冲突维度
+    input_schema:
+      faction_relations:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          fac_a: str
+          fac_b: str
+          status:
+            enum:
+            - 同盟
+            - 敌对
+            - 中立
+            - 贸易
+            - 冷戰
+            - 附庸
+          conflict_dimensions:
+            type: list
+            items:
+              enum:
+              - 领土
+              - 资源
+              - 意识形态
+              - 历史仇怨
+              - 宗教
+              - 影响力
+          description:
+            type: str
+            min_length: 10
+          dynamic:
+            type: str
+            min_length: 10
+    quality_checks:
+    - check: faction_exists
+      rule: fac_a 和 fac_b 必须对应已存在的势力
+      level: error
+    - check: relation_balance
+      rule: 关系网应有敌有友，非全敌对或全同盟
+      level: warning
+    - check: conflict_overlap
+      rule: 势力关系冲突应与世界观规则关联
+      level: warning
+    agent_prompt_hints:
+    - 势力关系应反映世界观规则的内在冲突
+    - 关系动态应随时间演变，非固定不变
+    - 冲突维度应具体可操作，非抽象敌意
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取所有势力数据'
+    - '  2. 建立势力间关系网络'
+    - '  3. 标注外交状态和冲突维度'
+    - '  4. 标记关系动态演变方向'
+    - '  5. 质量审查并展示'
+  item:
+    display_name: 物品库
+    dependencies:
+    - world_building
+    generation_rule: 生成小说中的重要物品，含属性、持有者和历史
+    input_schema:
+      items:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          name:
+            type: str
+            min_length: 2
+          type:
+            enum:
+            - 武器
+            - 防具
+            - 道具
+            - 药品
+            - 书籍
+            - 信物
+            - 货币
+            - 神器
+            - 日常用品
+          properties:
+            type: object
+            required:
+            - description
+            - significance
+          holder_timeline:
+            type: list
+            items:
+              char_id: str
+              period: str
+          related_rules:
+            type: list
+          history:
+            type: str
+            min_length: 10
+    quality_checks:
+    - check: item_holder_exists
+      rule: holder_timeline 中的 char_id 必须存在
+      level: error
+    - check: item_rule_exists
+      rule: related_rules 必须对应已存在的世界观规则
+      level: error
+    - check: item_significance
+      rule: 每个物品必须有叙事意义说明
+      level: warning
+    agent_prompt_hints:
+    - 物品应服务于情节或角色，非为存在而存在
+    - 物品属性应受世界观规则的约束
+    - 持有者时间线应体现物品流动的逻辑
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取世界观规则集'
+    - '  2. 生成重要物品清单'
+    - '  3. 标注属性和持有者时间线'
+    - '  4. 关联世界观规则'
+    - '  5. 质量审查并展示'
+  char_faction:
+    display_name: 人物-势力关联
+    dependencies:
+    - character
+    - faction
+    - relation
+    - faction_relation
+    generation_rule: 交叉验证角色与势力的一致性，生成关联映射，确保五套设定一致且兼容
+    input_schema:
+      links:
+        type: list
+        min_items: 1
+        item_schema:
+          char_id: str
+          char_name: str
+          faction_id: str
+          faction_name: str
+          membership_type:
+            enum:
+            - 正式成员
+            - 预备成员
+            - 盟友
+            - 卧底
+            - 自由人/无势力
+            - 前成员
+            - 荣誉成员
+          join_chapter:
+            type: int
+            min: 1
+          leave_chapter:
+            type: int
+            required: false
+          role_in_faction:
+            type: str
+            min_length: 2
+          loyalty:
+            type: float
+            min: 0
+            max: 1
+          notes:
+            type: str
+            min_length: 0
+    quality_checks:
+    - check: each_char_has_faction
+      rule: 每个角色必须与至少一个势力关联（自由人需标注）
+      level: error
+    - check: faction_hostile_check
+      rule: 同一角色不能同时隶属互相敌对的势力（卧底需特殊标注）
+      level: error
+    - check: char_exists
+      rule: char_id 必须对应已存在的角色
+      level: error
+    - check: faction_exists
+      rule: faction_id 必须对应已存在的势力
+      level: error
+    - check: relation_consistency
+      rule: 关联关系不能与人物关系、势力关系矛盾
+      level: error
+    agent_prompt_hints:
+    - 每个角色至少关联一个势力，自由人/中立角色标注为'自由人/无势力'
+    - 同一角色可隶属多个势力，但需要检查这些势力之间是否敌对
+    - 角色的势力归属应与人物关系一致（好友不应属于敌对势力）
+    - 加载 src/ai/prompts/char_faction_bridge.md 中的人物-势力关联规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取人物设定、势力设定、人物关系、势力关系数据'
+    - '  2. 交叉验证五套设定的一致性'
+    - '  3. 生成人物-势力关联映射'
+    - '  4. 检测矛盾（角色同时隶属敌对势力等）'
+    - '  5. 质量审查并展示'
+  arc:
+    display_name: 角色弧线
+    dependencies:
+    - character
+    - relation
+    - char_faction
+    generation_rule: 为每个核心角色设计角色弧线，含起点、转折点和终点
+    input_schema:
+      arcs:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          char_id: str
+          arc_type:
+            enum:
+            - 成长弧
+            - 堕落弧
+            - 转变弧
+            - 固定弧
+            - 悲劇弧
+          start_point:
+            type: str
+            min_length: 10
+          turning_points:
+            type: list
+            min_items: 1
+            item_schema:
+              chapter: int
+              event: str
+              change: str
+          end_point:
+            type: str
+            min_length: 10
+          theme_relevance:
+            type: str
+            min_length: 10
+    quality_checks:
+    - check: char_exists_in_arc
+      rule: char_id 必须对应已存在的角色
+      level: error
+    - check: protagonist_arc
+      rule: 主角必须有弧线
+      level: error
+    - check: arc_alignment
+      rule: 弧线与角色设定一致，不得矛盾
+      level: warning
+    agent_prompt_hints:
+    - 弧线起点与终点应有显著差异，体现角色变化
+    - 转折点应与大纲关键事件对应
+    - 弧线主题应与小说主题呼应
+    - 加载 src/ai/prompts/arc.md 中的角色弧线设计规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取角色和关系数据'
+    - '  2. 为核心角色设计角色弧线'
+    - '  3. 标注弧线转折点与大纲对应'
+    - '  4. 质量审查并展示'
+  foreshadow:
+    display_name: 伏笔追踪
+    dependencies:
+    - character
+    - faction
+    - item
+    generation_rule: 生成伏笔并注册到 ChromaDB，含 8 种伏笔类型
+    input_schema:
+      foreshadows:
+        type: list
+        min_items: 1
+        item_schema:
+          id: str
+          type:
+            enum:
+            - 信息伏笔
+            - 人物伏笔
+            - 物品伏笔
+            - 能力伏笔
+            - 关系伏笔
+            - 规则伏笔
+            - 情感伏笔
+            - 结构伏笔
+          target_chapter:
+            type: int
+            min: 1
+          description:
+            type: str
+            min_length: 20
+          hint_text:
+            type: str
+            min_length: 10
+          importance:
+            type: float
+            min: 0
+            max: 1
+    quality_checks:
+    - check: chroma_deduplicate
+      rule: 与已有伏笔余弦相似度 < 0.85
+      level: error
+    - check: target_chapter_valid
+      rule: target_chapter 在大纲章节范围内
+      level: error
+    - check: major_foreshadow_plan
+      rule: 重要性 > 0.7 的伏笔必须有 reveal_plan
+      level: error
+    agent_prompt_hints:
+    - 伏笔应分布在全文各阶段，非集中在开头
+    - 重要性 > 0.7 的主伏笔必须设计揭晓计划
+    - 伏笔类型多样化，不局限于单一类型
+    - 加载 src/ai/prompts/foreshadow.md 中的伏笔追踪规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取大纲、角色、势力数据'
+    - '  2. 设计伏笔并分类（8 种类型）'
+    - '  3. 注册伏笔到向量数据库'
+    - '  4. 执行伏笔完整性检查'
+    - '  5. 质量审查并展示'
+  outline:
+    display_name: 拟定大纲
+    dependencies:
+    - inspiration
+    - theme
+    - world_building
+    - character
+    - faction
+    - item
+    - relation
+    - faction_relation
+    - char_faction
+    - arc
+    - foreshadow
+    generation_rule: 生成三幕结构大纲，含因果链标注和节奏热力图
+    input_schema:
+      acts:
+        type: list
+        min_items: 3
+        max_items: 3
+        item_schema:
+          act: int
+          name: str
+          chapters:
+            type: int
+            min: 3
+            max: 60
+          summary: str
+          key_events:
+            type: list
+            min_items: 1
+      causal_chain:
+        type: list
+        min_items: 1
+        item_schema:
+          from_event: str
+          to_event: str
+          cause_type:
+            enum:
+            - 直接因果
+            - 间接因果
+            - 伏笔关联
+      rhythm_map:
+        type: list
+        min_items: 3
+        item_schema:
+          chapter_range: str
+          tension:
+            type: float
+            min: 0
+            max: 1
+          pace:
+            enum:
+            - slow
+            - medium
+            - fast
+    quality_checks:
+    - check: act_count
+      rule: 必须恰好三幕
+      level: error
+    - check: causal_chain_not_empty
+      rule: 必须有因果链
+      level: error
+    - check: total_chapters_range
+      rule: 总章节数 10-200
+      level: error
+    - check: act2_greater_act1
+      rule: 第二幕章节数必须大于第一幕
+      level: error
+    - check: key_events_in_causal_chain
+      rule: 每个 key_event 必须在因果链中出现
+      level: warning
+    agent_prompt_hints:
+    - 第一幕(setup)20-30%, 第二幕(confrontation)40-50%, 第三幕(resolution)20-30%
+    - 因果链需有一条跨幕因果链
+    - 节奏曲线至少 3 次 tension 峰值变化
+    - 加载 src/ai/prompts/outline.md 中的三幕节奏控制规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取小说主题数据'
+    - '  2. 构建三幕结构：设置/对抗/解决'
+    - '  3. 标注各幕间的因果链关系'
+    - '  4. 生成节奏热力图'
+    - '  5. 质量审查（逻辑链完整性、章节数校验）'
+  volume:
+    display_name: 分卷配置
+    dependencies:
+    - outline
+    generation_rule: 将大纲章节划分为分卷，配置每卷的标题和目标字数
+    input_schema:
+      volumes:
+        type: list
+        min_items: 1
+        item_schema:
+          volume_number:
+            type: int
+            min: 1
+          title:
+            type: str
+            min_length: 2
+          chapter_range: str
+          chapter_count:
+            type: int
+            min: 1
+          target_word_count:
+            type: int
+            min: 10000
+          summary:
+            type: str
+            min_length: 20
+    quality_checks:
+    - check: volume_cover_all
+      rule: 所有大纲章节必须分配到分卷
+      level: error
+    - check: volume_count_balance
+      rule: 各分卷章节数差异不超过 30%
+      level: warning
+    - check: word_count_feasible
+      rule: 目标字数应在合理范围内（3000-10000 字/章）
+      level: warning
+    agent_prompt_hints:
+    - 分卷应自然对应三幕结构中的段落
+    - 每卷应有独立的主题和情感弧线
+    - 分卷标题应反映该卷核心内容
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取大纲章节数据'
+    - '  2. 按剧情段落划分分卷'
+    - '  3. 配置每卷标题和目标字数'
+    - '  4. 质量审查并展示'
+  detail_outline:
+    display_name: 章节细纲
+    dependencies:
+    - volume
+    - world_building
+    - character
+    - item
+    - foreshadow
+    generation_rule: 逐章节生成场景级细纲，含 POV 分配和字数预算
+    input_schema:
+      detail_outlines:
+        type: list
+        min_items: 1
+        item_schema:
+          chapter_number:
+            type: int
+            min: 1
+          scenes:
+            type: list
+            min_items: 1
+            item_schema:
+              scene_id: str
+              pov_character: str
+              setting:
+                type: str
+                min_length: 5
+              word_budget:
+                type: int
+                min: 500
+              constraints:
+                type: list
+                max_items: 8
+              key_elements:
+                type: list
+              foreshadow_refs:
+                type: list
+    quality_checks:
+    - check: scene_weight_valid
+      rule: 场景预算总和 = 章节总预算（误差 ≤ 5%）
+      level: error
+    - check: pov_assignment
+      rule: POV 角色明确指定且为已注册角色
+      level: error
+    - check: constraint_limit
+      rule: 约束条数 ≤ 8 条/场景
+      level: error
+    - check: foreshadow_ref_valid
+      rule: foreshadow_refs 中所有伏笔 ID 必须已注册
+      level: error
+    agent_prompt_hints:
+    - 每节字数预算 = 章节总预算 × 场景权重
+    - 约束应具可操作性（可直接指导写作）
+    - 伏笔引用应在该章节范围内可取回
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取大纲、世界观、角色数据'
+    - '  2. 逐章节拆解场景'
+    - '  3. 分配 POV 和字数预算'
+    - '  4. 拉取约束和伏笔引用'
+    - '  5. 质量审查（场景预算校验）'
+  archive:
+    display_name: 小说档案
+    dependencies:
+    - inspiration
+    - theme
+    - world_building
+    - character
+    - faction
+    - item
+    - relation
+    - faction_relation
+    - char_faction
+    - arc
+    - foreshadow
+    - outline
+    - volume
+    - detail_outline
+    generation_rule: 汇总所有设定数据，生成结构化小说档案
+    input_schema:
+      archive:
+        type: object
+        required:
+        - world_building
+        - characters
+        - relations
+        - arcs
+        - factions
+        - faction_relations
+        - items
+        - foreshadows
+        description: 所有设定数据的完整归档
+    quality_checks:
+    - check: archive_completeness
+      rule: 所有前置模块的数据必须归档
+      level: error
+    - check: archive_consistency
+      rule: 归档数据与各模块源数据一致
+      level: error
+    - check: cross_reference_valid
+      rule: 档案中所有交叉引用（ID 引用）必须有效
+      level: error
+    agent_prompt_hints:
+    - 档案应按模块分类组织，便于后续检索
+    - 交叉引用保持一致性，避免断链
+    - 为每个实体生成简短摘要，方便 AI 快速索引
+    display_template:
+    - 📋 执行计划：
+    - '  1. 汇总所有前置模块的设定数据'
+    - '  2. 生成结构化小说档案'
+    - '  3. 验证交叉引用完整性'
+    - '  4. 质量审查并展示'
+  synopsis:
+    display_name: 小说简介
+    dependencies:
+    - archive
+    generation_rule: 基于完整设定生成多版本小说简介（一句话/短/长/营销）
+    input_schema:
+      synopsis:
+        type: object
+        required:
+        - one_line
+        - short
+        - full
+        - marketing
+        properties:
+          one_line:
+            type: str
+            min_length: 10
+            max_length: 50
+          short:
+            type: str
+            min_length: 50
+            max_length: 200
+          full:
+            type: str
+            min_length: 200
+          marketing:
+            type: str
+            min_length: 100
+    quality_checks:
+    - check: spoiler_free
+      rule: 简介不得包含关键情节剧透
+      level: error
+    - check: tone_match
+      rule: 简介语气应与小说基调一致
+      level: warning
+    - check: hook_strength
+      rule: 营销版简介必须有强钩子
+      level: warning
+    agent_prompt_hints:
+    - 一句话简介应包含主角+困境+独特性
+    - 完整简介不能剧透中点转折后的内容
+    - 营销版简介针对目标读者群体
+    - 加载 src/ai/prompts/synopsis.md 中的小说简介写作规则集
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取主题、大纲和档案数据'
+    - '  2. 生成一句话简介'
+    - '  3. 生成短版和完整版简介'
+    - '  4. 生成营销版简介'
+    - '  5. 质量审查并展示'
+  manuscript:
+    display_name: 正文初稿
+    dependencies:
+    - detail_outline
+    - world_building
+    - character
+    - item
+    - foreshadow
+    generation_rule: 逐场景生成正文初稿，执行质量审查和 AI 痕迹清除
+    input_schema:
+      manuscript:
+        type: object
+        required:
+        - chapter_number
+        - scenes
+        properties:
+          chapter_number:
+            type: int
+            min: 1
+          scenes:
+            type: list
+            item_schema:
+              scene_id: str
+              content:
+                type: str
+                min_length: 100
+              word_count:
+                type: int
+                min: 500
+              pov: str
+    quality_checks:
+    - check: word_count_min
+      rule: 每章字数 ≥ 细纲预算的 80%
+      level: error
+    - check: word_count_max
+      rule: 每章字数 ≤ 细纲预算的 120%
+      level: error
+    - check: scene_count_match
+      rule: 场景数必须与细纲一致
+      level: error
+    - check: pov_match
+      rule: 场景 POV 必须与细纲一致
+      level: error
+    agent_prompt_hints:
+    - 加载 src/ai/prompts/manuscript_writer.md 中的完整规则集
+    - 【开篇钩子法则】前三章必须完成悬疑层→威胁层→超越层三级递进
+    - 【推理场景规则】推理所用全部证据必须在3章内有明确铺垫
+    - 【对话写作规则】每段对话必须推动情节/塑造性格/制造紧张至少2项，参考 src/ai/prompts/dialogue.md 中的对话写作规则
+    - 【节奏控制规则】每800字必须出现信息揭露/情绪变化/悬念强化/场景切换至少1项
+    - 【句式多样性规则】连续300字内同句式开头≤2次，过渡词密度≤2次/500字
+    - 【情感层次规则】禁止直接告知情感（禁止出现'他感到'），必须通过动作/反应间接表达
+    - 【推理谜题设计】参考 src/ai/prompts/puzzle_design.md 中的推理场景规则
+    - 逐场景独立生成，每个场景在自己的约束内运行
+    - 段落组实时跟踪字数，第一次输出就在目标范围内
+    - 生成前查询参考小说片段作为风格锚点（调用 reference_retriever）
+    - 生成后执行四层审查和 AI 痕迹清除
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取细纲、世界观、角色、伏笔数据'
+    - '  2. 逐场景生成正文初稿'
+    - '  3. 实时跟踪字数预算'
+    - '  4. 执行质量审查（四层审查）'
+    - '  5. 执行 AI 痕迹清除流水线'
+    - '  6. 同步到用户视图'
+  review:
+    display_name: 正文审核
+    dependencies:
+    - manuscript
+    - world_building
+    - character
+    - foreshadow
+    - item
+    generation_rule: 对正文执行完整的四层质量审查，含设定一致性和 AI 痕迹检测
+    input_schema:
+      review:
+        type: object
+        required:
+        - chapter_number
+        - layers
+        - ai_trace
+        - overall_score
+        properties:
+          chapter_number:
+            type: int
+            min: 1
+          layers:
+            type: array
+            items:
+              type: object
+              properties:
+                layer:
+                  enum:
+                  - setting_consistency
+                  - logic_chain
+                  - literary_quality
+                  - reader_engagement
+                score:
+                  type: float
+                  min: 0
+                  max: 1
+                issues:
+                  type: list
+                passed: bool
+          ai_trace:
+            type: object
+            properties:
+              detected: bool
+              traces:
+                type: list
+              purified: bool
+          overall_score:
+            type: float
+            min: 0
+            max: 1
+    quality_checks:
+    - check: setting_consistency_review
+      rule: 设定一致性审查（四层第一层）
+      level: error
+    - check: logic_chain_review
+      rule: 逻辑链审查（四层第二层）
+      level: error
+    - check: ai_trace_review
+      rule: AI 痕迹检测（四层第三层）
+      level: error
+    agent_prompt_hints:
+    - 设定一致性审查比对世界观和角色数据
+    - 逻辑链审查验证因果和动机连贯性
+    - AI 痕迹检测覆盖 6 大特征
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取正文和所有设定数据'
+    - '  2. 执行四层质量审查'
+    - '  3. 执行 AI 痕迹检测'
+    - '  4. 生成审查报告'
+    - '  5. 展示审查结果供用户确认'
+  fix:
+    display_name: 正文修正
+    dependencies:
+    - review
+    - manuscript
+    generation_rule: 根据审查结果修正正文问题，含自动修复和用户确认
+    input_schema:
+      fix:
+        type: object
+        required:
+        - chapter_number
+        - fixes
+        - original_review
+        properties:
+          chapter_number:
+            type: int
+            min: 1
+          fixes:
+            type: list
+            items:
+              type: object
+              properties:
+                issue_id: str
+                fix_type:
+                  enum:
+                  - auto
+                  - semi_auto
+                  - manual
+                original: str
+                fixed: str
+                status:
+                  enum:
+                  - applied
+                  - pending
+                  - rejected
+    quality_checks:
+    - check: all_issues_addressed
+      rule: 审查发现的所有问题必须处理（修复/标记忽略）
+      level: error
+    - check: fix_no_new_issues
+      rule: 修正后二次审查不得产生新 BLOCKER 问题
+      level: error
+    - check: ai_trace_cleared
+      rule: AI 痕迹已清除（L1 自动、L2 已确认、L3 已报告）
+      level: warning
+    agent_prompt_hints:
+    - L1 问题自动修复，L2 提供 3 种方案供选择
+    - 修复后执行二次审查，确保无新问题
+    - 用户可逐条确认/拒绝修复方案
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取审查报告和正文初稿'
+    - '  2. 逐条处理审查发现的问题'
+    - '  3. L1 自动修复 / L2 提供方案 / L3 标记报告'
+    - '  4. 执行二次审查'
+    - '  5. 展示修正结果供用户确认'
+  export:
+    display_name: 导出发布
+    dependencies:
+    - manuscript
+    - fix
+    - archive
+    generation_rule: 将完整小说导出为发布格式，含封面和目录
+    input_schema:
+      export:
+        type: object
+        required:
+        - format
+        - content
+        - metadata
+        properties:
+          format:
+            enum:
+            - markdown
+            - epub
+            - txt
+            - pdf
+          content:
+            type: object
+            properties:
+              title: str
+              author: str
+              preface: str
+              volumes:
+                type: list
+              chapters:
+                type: list
+              epilogue: str
+          metadata:
+            type: object
+            properties:
+              word_count: int
+              chapter_count: int
+              volume_count: int
+              exported_at: str
+    quality_checks:
+    - check: format_valid
+      rule: 导出格式正确（markdown/epub/txt/pdf）
+      level: error
+    - check: content_complete
+      rule: 内容完整无遗漏（所有章节、分卷、附件）
+      level: error
+    - check: metadata_accurate
+      rule: 元数据（字数/章节数）与实际一致
+      level: warning
+    agent_prompt_hints:
+    - 导出格式应包含封面页和目录
+    - Markdown 格式适合在线阅读
+    - 元数据应准确反映小说内容统计
+    display_template:
+    - 📋 执行计划：
+    - '  1. 读取完整小说数据（正文+设定）'
+    - '  2. 选择导出格式'
+    - '  3. 生成封面和目录'
+    - '  4. 组装完整内容'
+    - '  5. 执行导出前质量检查'
+    - '  6. 展示导出结果供用户下载'

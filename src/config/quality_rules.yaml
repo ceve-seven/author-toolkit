@@ -1,0 +1,411 @@
+# src/config/quality_rules.yaml（增强版）
+# 作用：定义质量审查的规则、检测算法和自动修复策略
+# 读取者：QualityOrchestrator.review()
+# 读取时机：阶段三执行末尾
+
+quality_rules:
+  setting_consistency:
+    display_name: "设定一致性"
+    applies_to: [manuscript, fix_manuscript]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. 提取正文所有世界观实体引用（地点/规则/势力/物品）
+      2. 对照 world_building 数据逐一验证
+      3. 提取所有角色能力/行为，对照 characters 表验证
+      4. 冲突时标记位置 + 违反规则编号 + 冲突类型
+      5. 统计冲突总数，>0 时标记为 BLOCKER
+    auto_fix: false
+    description: "确保正文中的设定描述与世界构建数据一致"
+
+  logic_chain_integrity:
+    display_name: "逻辑链完整性"
+    applies_to: [outline, manuscript]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. 提取因果链中所有 from_event → to_event 映射
+      2. 检查每个 to_event 是否至少有一个 from_event 前置
+      3. 检查是否有孤立事件（无因/无果）
+      4. 检查跨幕因果链比率（至少 1 条跨幕）
+      5. 孤立事件 > 0 时标记为 BLOCKER
+    auto_fix: false
+    description: "确保大纲因果链完整，无孤立事件"
+
+  outline_rhythm_quality:
+    display_name: "大纲节奏质量"
+    applies_to: [outline]
+    level: critical
+    priority: 1
+    check_algorithm: |
+      1. [冲突强度量化] 为每章标注冲突强度值（1-10），检测异常模式：
+         A. 连续低谷：连续3章以上冲突强度<3 → 标记，建议插入次级冲突
+         B. 连续高峰：连续5章以上冲突强度>8 → 标记，建议插入冷却点
+         C. 峰值递减：全篇最高值出现在中段而非结尾 → 标记，建议调整
+         D. 起点过高：第1章冲突强度>6 → 标记，建议前移情感建立
+      2. [情绪类型交替] 为每章标注主导情绪类型，检测连续4章以上同类型 → 标记失衡区间
+      3. [事件间距检测] 统计同类关键事件（战斗/情感爆发/重大揭示/角色死亡）的出现间隔，检测间距异常（过近/过远）
+      4. 生成《节奏修正报告》含检测到的问题类型、位置、AI已执行的修正
+    auto_fix: true
+    fix_strategy: "根据检测到的异常模式生成修正方案（插入次级冲突/冷却点/调整峰值位置），用户审核后执行"
+    description: "冲突强度量化、情绪类型交替、事件间距三维节奏检测"
+
+  outline_logic_quality:
+    display_name: "大纲逻辑质量"
+    applies_to: [outline]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. [因果链断裂检测] 对每章每个核心事件追溯起因：
+         角色主动推动 → 检查动机链是否完整
+         外部事件触发 → 检查前文是否有铺垫
+      2. [动机不一致检测] 逐章比对角色行为与设定动机，标记行为偏离
+      3. [信息对等性检查] 逐章检查角色知识边界：
+         角色是否做出基于"他不知道的信息"的决策？
+         角色是否未利用"他应该知道的信息"？
+      4. 生成《逻辑修正报告》含断裂位置/不一致位置/对等性破坏位置及修正方案
+    auto_fix: true
+    fix_strategy: "因果链断裂→在前文插入铺垫；动机不一致→修改行为或补动机转变铺垫；信息对等性破坏→修改决策或调整知识边界标注"
+    description: "因果链完整性、动机一致性、信息对等性三重逻辑审查"
+
+  outline_structure_quality:
+    display_name: "大纲结构质量"
+    applies_to: [outline]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. [幕比例检测] 一幕占20-25%/二幕50-60%/三幕15-25%，严重偏离标记
+      2. [关键节点位置] 催化事件10-15%/中点转折45-55%/最终高潮85-95%，位置偏移标记
+      3. [多线平衡检测] 统计每条情节线在各章节的推进情况：
+         支线连续>8章无推进 → 标记遗忘
+         支线总占比<5%却在结局承担关键功能 → 标记铺垫不足
+         主线连续>5章被支线挤压 → 标记方向感缺失
+      4. 生成《结构修正报告》含压缩/扩充/移动方案
+    auto_fix: true
+    fix_strategy: "幕比例→压缩扩充；关键节点→移动位置；多线平衡→插入/合并支线推进"
+    description: "幕比例、关键节点位置、多线平衡三维结构审查"
+
+  outline_comprehensive_checklist:
+    display_name: "大纲综合审核检查清单"
+    applies_to: [outline]
+    level: info
+    priority: 9
+    check_algorithm: |
+      在节奏/逻辑/结构审查通过后，最终输出用户直觉检查清单供用户快速验证：
+      【节奏检查】
+      1. 随便挑三个位置（前中后各一），连读3章——有没有在任一处觉得"没什么让人兴奋的东西"？
+      2. 有没有哪个位置的冲突强度让你觉得"已经到这个程度了，后面还能怎么升级？"
+      3. 中间有哪段让你想快速跳过吗？
+      【逻辑检查】
+      4. 随便挑三个情节节点，问"这件事为什么会发生？"——能否立刻回答因果链？
+      5. 有没有哪个角色的行为像"这不像是他会做的事"？
+      6. 有没有哪个节点的剧情推进让你觉得"主角的运气太好了？"
+      【结构检查】
+      7. 开场读完后是否产生"我想继续看他的故事"的感觉？
+      8. 结尾是否让你觉得"这就结束了？我还有问题没被回答"？
+      9. 有没有哪条支线你完全忘了存在，到后面它突然跳出来了？
+    auto_fix: false
+    description: "用户直觉驱动的九项大纲终审检查清单"
+
+  outline_user_instruction_templates:
+    display_name: "大纲用户指令模板"
+    applies_to: [outline]
+    level: info
+    priority: 10
+    check_algorithm: |
+      当用户发现大纲问题但说不清具体修改方式时，可使用以下指令模板驱动AI自动诊断和修正：
+      【节奏类】
+      - "这段大纲读起来太平了——自查这几章的冲突强度和情绪类型，标记问题并修正。"
+      - "高潮结束之后拖得太久了——高潮位置往后移，让高潮更接近结局。"
+      【逻辑类】
+      - "主角在这章做的选择我不太信——回溯动机链，看哪个环节铺垫不够。"
+      - "这个转折太突然了——在前文找两个位置插入暗示，让读者在回收时觉得'原来之前是这个意思'。"
+      【结构类】
+      - "开场太慢了——压缩第一幕，把催化事件提前至少3章，同时确保情感建立不损。"
+      - "支线X到后面消失了——检查推进频率，如果中断太久，重新安排后续出场。"
+    auto_fix: false
+    description: "用户驱动AI大纲诊断的六条指令模板集合"
+
+  outline_quality:
+    display_name: "大纲质量审查（通用）"
+    applies_to: [outline]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. 检查三幕结构完整性（3 幕齐全）
+      2. 检查章节数分配比例（20-30%/40-50%/20-30%）
+      3. 检查因果链非空
+      4. 检查节奏热力图至少 3 个 tension 峰值
+      5. 比例偏差 > 10% 时标记为 BLOCKER
+    auto_fix: false
+    description: "审查三幕结构、章节分配和因果链完整性"
+
+  foreshadow_integrity:
+    display_name: "伏笔完整性"
+    applies_to: [detail_outline, manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 提取细纲/正文中所有 foreshadow_refs
+      2. 对照 foreshadows 表验证所有 ref 已注册
+      3. 检查主伏笔（importance > 0.7）是否已埋设
+      4. 检查已回收伏笔是否在 target_chapter 范围内
+      5. 未注册 ref > 0 时标记为 CRITICAL
+    auto_fix: false
+    description: "确保正文中的伏笔引用有效且主伏笔齐全"
+
+  literary_quality:
+    display_name: "文学质感"
+    applies_to: [manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 计算句式波动系数（std/mean），阈值 0.55
+      2. 计算过渡词密度（次/千字），阈值 6.0
+      3. 检测情感标签出现次数（"感到""觉得"等），阈值 2
+      4. 检测信息密集型对话占比，阈值 60%
+      5. 检测常见描写模板命中数，阈值 1
+      6. 每项未达标 +1 issue，≥3 项时标记为 CRITICAL
+    auto_fix: true
+    fix_strategy: "调用 AITracePurifier L1 自动修复器处理句式/过渡词/描写模板问题"
+    description: "检测 AI 写作的常见文学质量问题"
+
+  ai_trace_detection:
+    display_name: "AI 痕迹检测"
+    applies_to: [manuscript, fix_manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 调用 AITraceDetector.detect() 执行 19 大特征检测
+      2. 按 fix_level 分组（L1 自动/L2 半自动/L3 仅报告）
+      3. 若存在 L1 以外的问题 → CRITICAL
+      4. 所有问题均为 L1 → WARNING
+      5. 无问题 → INFO
+    auto_fix: true
+    fix_strategy: "L1 自动执行修复器链，L2 生成 3 种方案供用户选择"
+    description: "检测 19 大 AI 痕迹特征并分级处理"
+
+  chapter_consistency:
+    display_name: "跨章节一致性"
+    applies_to: [manuscript, fix_manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 提取所有章节的角色出场记录
+      2. 检查角色状态是否与前一章一致（受伤/死亡等）
+      3. 检查时间线是否连续（无跳跃/回溯）
+      4. 检查物品所有权是否连续
+      5. 状态不一致 > 0 时标记为 CRITICAL
+    auto_fix: false
+    description: "确保各章节间角色/时间/物品状态一致"
+
+  world_building_five_layers:
+    display_name: "世界观五层审查"
+    applies_to: [world_building]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. [主题适配审查] 逐条规则追问：是否拷问/放大/具体化主角的核心情感冲突？
+         强关联：规则直接作用于主角情感困境
+         中关联：规则间接影响主角外部环境
+         弱关联：标记为"设定赘肉"，提供改造方案使其与主题关联
+      2. [规则自洽性审查] 三步流程：
+         Step 1 规则原子化：每条规则拆解为不可再分的逻辑命题
+         Step 2 规则交叉推演：所有原子规则两两配对，检测隐性冲突
+         Step 3 裂缝决策清单：每条裂缝标注"涉及规则/冲突描述/叙事潜力/AI建议(填补/保留/开发)"
+      3. [结构完整性审查] 逐维度深度评级：
+         不及格：仅基础描述，故事中用到时需临时编
+         及格：有尺度感和分层
+         良好：自动产生冲突的结构性力量
+      4. [极端场景测试] 自动生成5-8个极端测试用例：
+         资源枯竭测试/规则对冲测试/规则滥用测试
+         致命级→必须修补/潜在级→可选修补/理论级→可忽略/叙事潜力点→写入设定
+      5. [叙事压力审查] 规则分类：
+         压力产生规则：天然让某些人受益/受损，自动产生结构性矛盾
+         纹理规则：不产生人际张力
+         标记"叙事潜力未被激活"的规则并提供激活建议
+    auto_fix: true
+    fix_strategy: "主题适配→弱关联规则改造方案；规则自洽→裂缝填补方案；结构完整→深度加深方案；极端测试→致命级修补+叙事潜力点利用"
+    description: "主题适配/规则自洽/结构完整/极端测试/叙事压力五层完整审查"
+
+  world_building_review_report:
+    display_name: "世界观审查报告用户交互框架"
+    applies_to: [world_building]
+    level: info
+    priority: 9
+    check_algorithm: |
+      五层审查完成后，自动输出结构化审查报告供用户逐层确认：
+      【报告结构】
+      一、主题适配摘要（半页）
+      - 哪些规则和主题强关联（不需关注）
+      - 哪些规则弱关联——AI建议删除/保留/改造？已自动执行的改造方案
+      二、规则裂缝清单（1-2页）
+      - 每条裂缝的位置、性质、AI建议（填补/保留/开发）
+      - 用户逐条确认：哪些填补、哪些保留为叙事潜力、哪些神秘化
+      三、结构完整性评级（半页）
+      - 每个维度的深度评级（不及格/及格/良好）
+      - 不及格维度——AI已自动生成加深方案
+      四、极端测试结果（1页）
+      - 致命级→必须修补/潜在级→可选修补/理论级→可忽略/叙事潜力点→写入势力设定
+      五、叙事压力激活（半页）
+      - 压力产生规则中哪些叙事潜力未激活→建议在大纲中插入对应冲突节点
+      【用户交互方式】
+      - 每条决策项展示时同步展示"可用命令"：接受/驳回/修改为...
+      - 用户确认全部决策项后，审查结果一次性写入
+    auto_fix: false
+    description: "世界观五层审查的结构化输出框架与用户逐层确认交互流程"
+
+  cross_module_linkage:
+    display_name: "跨模块联动更新"
+    applies_to: [world_building, characters, factions, items, foreshadows, outline]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      触发条件：修改任一实体核心字段/新增实体/删除实体/移动大纲关键事件
+      1. [正向追踪] 该实体引用了什么？→ 引用目标变化时检查本实体是否受影响
+      2. [反向追踪] 谁引用了该实体？→ 列出所有引用者逐项检查
+      3. [涟漪扩散] 受影响者的受影响者→ 递归追踪至不再产生新影响
+      输出《联动更新报告》：触发操作/直接影响/需要确认的连锁影响/建议方案
+    auto_fix: false
+    description: "修改一处设定后自动追踪正向/反向/涟漪影响范围并生成报告"
+
+  cross_module_validation_checklist:
+    display_name: "跨模块交叉验证清单"
+    applies_to: [world_building, characters, factions, items, foreshadows, outline, detail_outline]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      在每次跨模块联动更新完成后，自动执行以下结构性交叉验证：
+      1. [人物-势力] 所有 faction_members 中的 char_id 必须对应存在的 CHAR，且该 CHAR 的 faction_id 与成员表一致
+      2. [人物-弧线] 所有 ARC 的 char_id 必须对应存在的 CHAR
+      3. [人物-关系] 所有 REL 的 char_a/char_b 必须对应存在的 CHAR
+      4. [势力-关系] 所有 FAC_REL 的 fac_a/fac_b 必须对应存在的 FAC
+      5. [物品-持有者] ITEM holder_timeline 中的 char_id 必须对应存在的 CHAR
+      6. [物品-规则] ITEM related_rules 必须对应存在的 RULE
+      7. [伏笔-人物/物品/事件] FORE related_char/related_item/related_plot 必须对应存在的实体
+      8. [章节细纲-大纲] detail_outlines 中的 chapter_number 必须在 outlines 的章节范围内
+      9. [章节细纲-伏笔] 每章 foreshadow_refs 中所有 FORE 的 status 必须为"已埋设"或"待埋设"
+      10. [正文-细纲] manuscripts 中的 scenes 数组长度必须与对应 detail_outlines 一致
+      任意一项检测失败则标记为 CRITICAL，并生成具体的不一致报告
+    auto_fix: false
+    description: "十项结构性交叉验证，确保实体间引用关系的完整性和一致性"
+
+  character_consistency:
+    display_name: "角色一致性审查"
+    applies_to: [character, manuscript, fix_manuscript]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. 提取正文中角色出场的行为和对话
+      2. 对照角色四层档案验证：
+         - 行为是否与动机/恐惧/欲望一致
+         - 能力使用是否在知识边界内
+         - 秘密是否在恰当时间点揭示
+      3. 检查角色成长弧线是否按预设轨迹推进
+      4. 标记行为偏离位置 + 偏离类型 + 修正建议
+      5. 累计偏离 > 2 处标记为 BLOCKER
+    auto_fix: false
+    description: "确保角色行为和成长与四层档案设定一致"
+
+  plot_logic:
+    display_name: "情节逻辑审查"
+    applies_to: [outline, manuscript, detail_outline]
+    level: blocker
+    priority: 1
+    check_algorithm: |
+      1. [事件因果验证] 追踪每个事件的前置条件和后续影响
+      2. [时空一致性] 检查时间线无矛盾，空间位置逻辑合理
+      3. [角色知识边界] 验证角色决策基于其已知信息
+      4. [伏笔回收验证] 检查已回收伏笔的揭晓逻辑是否自洽
+      5. 逻辑矛盾 > 0 处标记为 BLOCKER
+    auto_fix: false
+    description: "确保情节发展符合因果逻辑和时空一致性"
+
+  reader_engagement:
+    display_name: "读者体验审查"
+    applies_to: [manuscript]
+    level: warning
+    priority: 3
+    check_algorithm: |
+      1. [钩子强度] 评估每章开头/结尾的钩子强度（1-10分）
+      2. [情感曲线] 检测情感高点分布是否均匀，无持续低潮
+      3. [信息释放节奏] 检查信息释放速度（过快/过慢）
+      4. [悬念密度] 统计每章悬念数量，悬空缺位标记
+      5. 生成读者体验评分报告
+    auto_fix: false
+    description: "从读者视角评估故事的吸引力和阅读体验"
+
+  hook_design:
+    display_name: "章末钩子设计审查"
+    applies_to: [manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 提取每章结尾300字，分析是否为以下类型的钩子：
+         A. 问题钩子（提出未回答的问题）
+         B. 悬念钩子（展示即将到来的威胁）
+         C. 反转钩子（颠覆读者认知的信息）
+         D. 情感钩子（触发强烈共鸣的瞬间）
+      2. 统计无钩子章节的占比，> 20% 标记为 CRITICAL
+      3. 连续2章以上无强钩子（评分<6）标记为 CRITICAL
+    auto_fix: true
+    fix_strategy: "为无钩子章节的结尾插入悬念/问题/反转/情感四类钩子之一，确保读者产生追读欲望"
+    description: "确保每章结尾都设计有效的追读钩子"
+
+  emotion_showing:
+    display_name: "情感表现方式审查"
+    applies_to: [manuscript]
+    level: critical
+    priority: 2
+    check_algorithm: |
+      1. 统计直接情感标签（他感到/她愤怒/心中充满/突然觉得）出现的频次（次/千字）
+      2. 统计间接情感表现（身体反应/动作/对话语气/环境映射）出现的频次
+      3. 计算 间接:直接 比值，< 3:1 时标记为 CRITICAL
+      4. 提取所有直接情感标签的具体位置，标记为待修复
+    auto_fix: true
+    fix_strategy: "将直接情感标签替换为间接表现方式。例如'他感到恐惧'→'他的手指微微颤抖，额角渗出汗珠'"
+    description: "禁止直接告知情感（他感到/她觉得），强制通过动作/反应/环境映射间接表现"
+
+quality_templates:
+  review_report_md: |
+    # 质量审查报告
+
+    ## 基本信息
+    - 作品：{{novel_title}}
+    - 环节：{{step_name}}
+    - 审查时间：{{review_time}}
+    - 总体评分：{{overall_score}}/100
+
+    ## 审查结果摘要
+    | 级别 | 数量 | 说明 |
+    |------|------|------|
+    | BLOCKER | {{blocker_count}} | 必须修复的阻断性问题 |
+    | CRITICAL | {{critical_count}} | 必须修改的严重问题 |
+    | WARNING | {{warning_count}} | 建议修改的问题 |
+    | INFO | {{info_count}} | 仅供观察的信息 |
+
+    ## 逐项审查详情
+    {% for rule_name, result in results.items() %}
+    ### {{result.display_name}}
+    - 级别：{{result.level}}
+    - 状态：{{"✅ 通过" if result.passed else "❌ 未通过"}}
+    - 详情：{{result.detail}}
+
+    {% if result.issues %}
+    **发现的问题：**
+    {% for issue in result.issues %}
+    - {{issue.description}}（位置：{{issue.location}}）
+    {% endfor %}
+    {% endif %}
+
+    {% if result.suggestions %}
+    **修正建议：**
+    {% for suggestion in result.suggestions %}
+    - {{suggestion}}
+    {% endfor %}
+    {% endif %}
+
+    {% endfor %}
+
+    ## 总结
+    {{summary}}
